@@ -1,0 +1,7 @@
+__pycache__
+MANIFEST
+dist
+build
+*.spec
+*.egg-info
+deploy.sh
