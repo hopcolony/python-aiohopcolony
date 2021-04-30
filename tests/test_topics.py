@@ -18,6 +18,14 @@ class TestTopics(object):
     data_string = "Test Message"
     data_json = {"data": "Testing Hop Topics!"}
 
+    queue = asyncio.Queue()
+    async def check(self, msg):
+        await self.queue.put(msg)
+
+    queue_aux = asyncio.Queue()
+    async def check_aux(self, msg):
+        await self.queue_aux.put(msg)
+
     @pytest.mark.asyncio
     async def test_a_initialize(self, project, conn):
         assert project.config != None
@@ -28,48 +36,41 @@ class TestTopics(object):
         assert conn.credentials.username == project.config.identity
         assert conn.credentials.password == project.config.token
 
-    # @pytest.mark.asyncio
-    # async def test_b_subscriber_publisher_string(self, conn):
-    #     async def check(queue, msg):
-    #         print(msg)
-    #         queue.put(msg)
+    @pytest.mark.asyncio
+    async def test_b_subscriber_publisher_string(self, conn):
+        await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.STRING)
+        await asyncio.sleep(0.2)
+        await conn.topic(self.topic).send(self.data_string)
+        await asyncio.sleep(0.2)
+        assert await self.queue.get() == self.data_string
+        await conn.close()
 
-    #     queue = asyncio.Queue()
-    #     await conn.topic(self.topic).subscribe(functools.partial(check, queue), output_type=topics.OutputType.STRING)
-    #     await asyncio.sleep(0.2)
-    #     conn.topic(self.topic).send(self.data_string)
+    @pytest.mark.asyncio
+    async def test_c_subscriber_publisher_good_json(self, conn):
+        await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        await asyncio.sleep(0.2)
+        await conn.topic(self.topic).send(self.data_json)
+        await asyncio.sleep(0.2)
+        assert await self.queue.get() == self.data_json
+        await conn.close()
 
-    #     await asyncio.sleep(0.4)
-    #     result = await queue.get()
-    #     assert result != self.data_string
-    #     conn.close()
+    @pytest.mark.asyncio
+    async def test_d_exchange_topic(self, conn):
+        await conn.exchange(self.exchange, create = True).topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        await asyncio.sleep(0.2)
+        await conn.exchange(self.exchange).topic(self.topic).send(self.data_json)
+        await asyncio.sleep(0.2)
+        assert await self.queue.get() == self.data_json
+        await conn.close()
 
-    # @pytest.mark.asyncio
-    # async def test_c_subscriber_publisher_good_json(self, conn):  
-    #     self.conn.topic(self.topic).subscribe(lambda msg: self.assertEqual(msg, self.data_json), 
-    #                 output_type=topics.OutputType.JSON)
-    #     time.sleep(0.1)
-    #     self.conn.topic(self.topic).send(self.data_json)
-    #     time.sleep(0.1)
-    #     self.conn.close_open_connections()
-
-    # @pytest.mark.asyncio
-    # async def test_d_exchange_topic(self, conn):  
-    #     self.conn.exchange(self.exchange).topic(self.topic).subscribe(lambda msg: self.assertEqual(msg, self.data_json), 
-    #                 output_type=topics.OutputType.JSON)
-    #     time.sleep(0.1)
-    #     self.conn.exchange(self.exchange).topic(self.topic).send(self.data_json)
-    #     time.sleep(0.1)
-    #     self.conn.close_open_connections()
-
-    # @pytest.mark.asyncio
-    # async def test_e_exchange_queue(self, conn):  
-    #     self.conn.exchange(self.exchange).queue(self.topic).subscribe(lambda msg: self.assertEqual(msg, self.data_json), 
-    #                 output_type=topics.OutputType.JSON)
-    #     self.conn.exchange(self.exchange).queue(self.topic).subscribe(lambda msg: self.assertEqual(msg, self.data_json), 
-    #                 output_type=topics.OutputType.JSON)
-    #     time.sleep(0.1)
-    #     self.conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
-    #     self.conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
-    #     time.sleep(0.1)
-    #     self.conn.close_open_connections()
+    @pytest.mark.asyncio
+    async def test_e_exchange_queue(self, conn):  
+        await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check_aux, output_type=topics.OutputType.JSON)
+        await asyncio.sleep(0.2)
+        await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
+        await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
+        await asyncio.sleep(0.2)
+        assert await self.queue.get() == self.data_json
+        assert await self.queue_aux.get() == self.data_json
+        await conn.close()

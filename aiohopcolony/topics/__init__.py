@@ -17,7 +17,7 @@ def connection(project = None):
     return HopTopicConnection(project)
 
 class HopTopicConnection:
-    open_connections = []
+    subscriptions = []
 
     def __init__(self, project):
         self.project = project
@@ -31,16 +31,16 @@ class HopTopicConnection:
         self.loops = {}
 
     def queue(self, name):
-        return HopTopicQueue(self.add_open_connection, self.parameters, binding = name, name = name)
+        return HopTopicQueue(self.add_subscription, self.parameters, binding = name, name = name)
 
     def exchange(self, name, create = False):
-        return HopTopicExchange(self.add_open_connection, self.parameters, name, create, type = ExchangeType.FANOUT)
+        return HopTopicExchange(self.add_subscription, self.parameters, name, create, type = ExchangeType.FANOUT)
 
     def topic(self, name):     
-        return HopTopicQueue(self.add_open_connection, self.parameters, exchange = "amq.topic", binding = name)
+        return HopTopicQueue(self.add_subscription, self.parameters, exchange = "amq.topic", binding = name)
 
-    def add_open_connection(self, conn):
-        self.open_connections.append(conn)
+    def add_subscription(self, conn):
+        self.subscriptions.append(conn)
 
     def signal_handler(self, sig):
         for thread, loop in self.loops.items():
@@ -75,7 +75,7 @@ class HopTopicConnection:
         loop.run_until_complete(group)
         loop.close()
 
-    def close(self):
-        for conn in self.open_connections:
-            conn.cancel()
-        self.open_connections.clear()
+    async def close(self):
+        for subscription in self.subscriptions:
+            await subscription.cancel()
+        self.subscriptions.clear()
