@@ -8,8 +8,8 @@ async def project():
                                             token = token)
 
 @pytest.fixture
-def conn():
-    return topics.connection()
+async def conn():
+    return await topics.connection()
 
 class TestTopics(object):
 
@@ -38,17 +38,21 @@ class TestTopics(object):
 
     @pytest.mark.asyncio
     async def test_b_subscriber_publisher_string(self, conn):
-        await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.STRING)
-        await conn.topic(self.topic).send(self.data_string)
+        subscription = await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.STRING)
+        channel = await conn.topic(self.topic).send(self.data_string)
+        await asyncio.sleep(0.1)
         assert await self.queue.get() == self.data_string
-        await conn.close()
+        await conn.cancel(subscription)
+        await conn.close(channel)
 
     @pytest.mark.asyncio
     async def test_c_subscriber_publisher_good_json(self, conn):
-        await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
-        await conn.topic(self.topic).send(self.data_json)
+        subscription = await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        channel = await conn.topic(self.topic).send(self.data_json)
+        await asyncio.sleep(0.05)
         assert await self.queue.get() == self.data_json
-        await conn.close()
+        await conn.cancel(subscription)
+        await conn.close(channel)
 
     @pytest.mark.asyncio
     async def test_d_exchange_topic_fail(self, conn):
@@ -57,21 +61,30 @@ class TestTopics(object):
     
     @pytest.mark.asyncio
     async def test_e_exchange_topic_fail(self, conn):
-        await conn.exchange(self.exchange, create = True).topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
-        await conn.exchange(self.exchange).topic(self.topic).send(self.data_json)
+        subscription = await conn.exchange(self.exchange, create = True).topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        channel = await conn.exchange(self.exchange).topic(self.topic).send(self.data_json)
+        await asyncio.sleep(0.05)
         assert await self.queue.get() == self.data_json
-        await conn.close()
+        await conn.cancel(subscription)
+        await conn.close(channel)
 
     @pytest.mark.asyncio
     async def test_f_exchange_queue(self, conn):  
-        await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
-        await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check_aux, output_type=topics.OutputType.JSON)
-        await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
-        await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
+        sub1 = await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+        sub2 = await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check_aux, output_type=topics.OutputType.JSON)
+        channel1 = await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
+        # This second send should use the same channel as before
+        channel2 = await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
+        assert channel1 == channel2
+
+        await asyncio.sleep(0.05)
         assert await self.queue.get() == self.data_json
         assert await self.queue_aux.get() == self.data_json
-        await conn.close()
+        await conn.cancel(sub1)
+        await conn.cancel(sub2)
+        await conn.close(channel1)
 
     @pytest.mark.asyncio
     async def test_g_delete_exchange(self, conn):
         await conn.exchange(self.exchange).delete()
+        await conn.close()

@@ -1,6 +1,5 @@
 import logging
 from enum import Enum
-from .helper import TopicsHelper
 from .queue import *
 
 _logger = logging.getLogger(__name__)
@@ -13,9 +12,9 @@ class ExchangeType(Enum):
 
 
 class HopTopicExchange:
-    def __init__(self, add_subscription, parameters, name, create, type=ExchangeType.TOPIC, durable=True, auto_delete=False):
-        self.add_subscription = add_subscription
-        self.parameters = parameters
+    def __init__(self, connection, name, create, type=ExchangeType.TOPIC, durable=True, auto_delete=False, channel=None):
+        self.connection = connection
+        self.channel = channel
         self.name = name
         self.exchange_declaration = None
 
@@ -31,19 +30,23 @@ class HopTopicExchange:
         return "topic"
 
     async def subscribe(self, callback, output_type=OutputType.STRING):
-        return await HopTopicQueue(self.add_subscription, self.parameters, exchange=self.name, exchange_declaration=self.exchange_declaration) \
+        return await HopTopicQueue(self.connection, exchange=self.name, exchange_declaration=self.exchange_declaration) \
             .subscribe(callback, output_type=output_type)
 
-    async def send(self, body):
-        await TopicsHelper.send(self.parameters, self.name, "", body, self.exchange_declaration)
+    async def send(self, body, channel = None):
+        if not channel:
+            channel = await self.channel(f"{self.name}.")
+        return await channel.send(self.name, "", body, self.exchange_declaratio)
 
     def topic(self, name):
-        return HopTopicQueue(self.add_subscription, self.parameters, exchange=self.name,
-                             binding=name, exchange_declaration=self.exchange_declaration)
+        return HopTopicQueue(self.connection, exchange=self.name,
+                             binding=name, exchange_declaration=self.exchange_declaration, channel = self.channel)
 
     def queue(self, name):
-        return HopTopicQueue(self.add_subscription, self.parameters, exchange=self.name,
-                             name=name, binding=name, exchange_declaration=self.exchange_declaration)
+        return HopTopicQueue(self.connection, exchange=self.name,
+                             name=name, binding=name, exchange_declaration=self.exchange_declaration, channel = self.channel)
 
-    async def delete(self):
-        return await TopicsHelper.delete_exchange(self.parameters, self.name)
+    async def delete(self, channel = None):
+        if not channel:
+            channel = await self.channel(f"{self.name}.")
+        return await channel.exchange_delete(self.name)

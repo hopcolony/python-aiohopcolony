@@ -1,6 +1,7 @@
 import aiohopcolony
 from .queue import *
 from .exchange import *
+from .helper import *
 import pika
 import asyncio
 import logging
@@ -10,7 +11,7 @@ from signal import SIGINT, SIGTERM
 _logger = logging.getLogger(__name__)
 
 
-def connection(project=None):
+async def connection(project=None):
     if not project:
         project = aiohopcolony.get_project()
     if not project:
@@ -20,13 +21,16 @@ def connection(project=None):
         raise aiohopcolony.ConfigNotFound(
             "You have no projects yet. Create one at https://console.hopcolony.io")
 
-    return HopTopicConnection(project)
+    return await HopTopicConnection.create(project)
 
 
 class HopTopicConnection:
-    subscriptions = []
+    subscriptions = set()
+    channels = {}
 
-    def __init__(self, project):
+    @classmethod
+    async def create(self, project):
+        self = HopTopicConnection()
         self.project = project
 
         self.host = "topics.hopcolony.io"
@@ -35,20 +39,29 @@ class HopTopicConnection:
             self.project.config.identity, self.project.config.token)
         self.parameters = pika.ConnectionParameters(host=self.host, port=self.port,
                                                     virtual_host=self.project.config.identity, credentials=self.credentials)
+        self.connection = await PikaConnection.create(self.parameters)
+        self.connection.add_subscription = self.add_subscription
 
         self.loops = {}
+        return self
 
     def queue(self, name):
-        return HopTopicQueue(self.add_subscription, self.parameters, binding=name, name=name)
+        return HopTopicQueue(self.connection, binding=name, name=name, channel = self.channel)
 
     def exchange(self, name, create=False):
-        return HopTopicExchange(self.add_subscription, self.parameters, name, create, type=ExchangeType.FANOUT)
+        return HopTopicExchange(self.connection, name, create, type=ExchangeType.FANOUT, channel = self.channel)
 
     def topic(self, name):
-        return HopTopicQueue(self.add_subscription, self.parameters, exchange="amq.topic", binding=name)
+        return HopTopicQueue(self.connection, exchange="amq.topic", binding=name, channel = self.channel)
 
-    def add_subscription(self, conn):
-        self.subscriptions.append(conn)
+    def add_subscription(self, subscription):
+        self.subscriptions.add(subscription)
+    
+    async def channel(self, name):
+        if name not in self.channels:
+            self.channels[name] = await PikaChannel.create(self.connection, id = name)
+        
+        return self.channels[name]
 
     def signal_handler(self, sig):
         for thread, loop in self.loops.items():
@@ -82,8 +95,22 @@ class HopTopicConnection:
         group = asyncio.gather(*tasks, return_exceptions=True)
         loop.run_until_complete(group)
         loop.close()
+    
+    async def cancel(self, subscription):
+        await subscription.cancel()
+        self.subscriptions.remove(subscription)
 
-    async def close(self):
-        for subscription in self.subscriptions:
-            await subscription.cancel()
-        self.subscriptions.clear()
+    async def close(self, channel = None):
+        if channel:
+            await channel.close()
+            self.channels.pop(channel.id)
+        else:
+            for subscription in self.subscriptions:
+                await subscription.cancel()
+            
+            for channel in self.channels.values():
+                if not channel.is_closed and not channel.is_closing:
+                    await channel.close()
+                
+            await self.connection.close()
+            self.subscriptions.clear()

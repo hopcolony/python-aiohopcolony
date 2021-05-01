@@ -3,6 +3,7 @@ import pika
 import json
 import inspect
 import logging
+from dataclasses import dataclass
 from pika.adapters.asyncio_connection import AsyncioConnection
 from concurrent.futures import ThreadPoolExecutor as Executor
 from enum import Enum
@@ -21,24 +22,20 @@ class MalformedJson(Exception):
 
 
 class Subscription(object):
-    def __init__(self, loop, connection, callback, output_type):
-        self.loop = loop
-        self.connection = connection
+    _canceled = False
+    _tasks = []
+
+    def __init__(self, channel, callback, output_type):
+        self.channel = channel
+        self.channel.add_on_cancel_callback(lambda reason: self.channel.close())
+
+        self.loop = channel.loop
+
         self.executor = Executor()
         self.loop.set_default_executor(self.executor)
 
         self.callback = callback
         self.output_type = output_type
-
-        self._tasks = []
-
-    def on_consumer_cancelled(self, reason):
-        if self.channel:
-            self.channel.close()
-
-    def add_channel(self, channel):
-        self.channel = channel
-        self.channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
     def on_message(self, ch, method, props, body):
         self.channel.basic_ack(method.delivery_tag)
@@ -66,31 +63,31 @@ class Subscription(object):
         self._tasks.append(task)
 
     async def cancel(self):
-        if not self.connection.is_closing and not self.connection.is_closed:
+        if not self._canceled:
             if self.executor:
                 # Wait for the pending threads to finish
                 self.executor.shutdown(wait=True)
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            await self.channel.stop(self.consumer_tag)
+            await self.channel.close(self.loop)
+            self._canceled = True
 
-            await TopicsHelper.stop_consumer(self.loop, self.channel, self.consumer_tag)
-            await TopicsHelper.close_channel(self.loop, self.channel)
-            await TopicsHelper.close_connection(self.loop, self.connection)
-
-
-class TopicsHelper(object):
-
-    @classmethod
-    def _get_loop(cls):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # If there is no event loop in the thread, create one abd set it
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop
+@dataclass
+class PikaConnection(object):
+    connection: AsyncioConnection
+    loop: asyncio.unix_events._UnixSelectorEventLoop
+    add_subscription = None
 
     @classmethod
-    async def _create_connection(cls, loop, parameters):
+    async def create(cls, parameters, loop = None):
+        if not loop:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If there is no event loop in the thread, create one abd set it
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
         future_conn = asyncio.Future()
 
         def on_connection_open(conn):
@@ -106,81 +103,31 @@ class TopicsHelper(object):
         conn = await future_conn
         if isinstance(conn, pika.adapters.utils.connection_workflow.AMQPConnectionWorkflowFailed):
             raise Exception(conn)
-        return conn
 
-    @classmethod
-    async def _create_channel(cls, loop, conn):
-        future_channel = asyncio.Future()
-        conn.channel(on_open_callback=lambda channel: loop.call_soon(
-            future_channel.set_result, channel))
-        return await future_channel
+        return cls(conn, loop)
 
-    @classmethod
-    async def _create_exchange(cls, loop, channel, exchange_declaration):
-        future_exchange = asyncio.Future()
-        channel.exchange_declare(**exchange_declaration,
-                                 callback=lambda exchange: loop.call_soon(future_exchange.set_result, exchange))
-        return await future_exchange
+    async def new_channel(self, loop = None):
+        if not loop:
+            loop = self.loop
 
-    @classmethod
-    async def _create_queue(cls, loop, channel, queue_declaration):
-        future_queue = asyncio.Future()
-        channel.queue_declare(**queue_declaration,
-                              callback=lambda queue: loop.call_soon(future_queue.set_result, queue))
-        return await future_queue
+        return await PikaChannel.create(self.connection, loop = loop)
 
-    @classmethod
-    async def _delete_exchange(cls, loop, channel, name):
-        future_exchange_deletion = asyncio.Future()
-        channel.exchange_delete(name,
-                                callback=lambda queue: loop.call_soon(future_exchange_deletion.set_result, True))
-        return await future_exchange_deletion
+    def channel(self, *args, **kwargs):
+        self.connection.channel(*args, **kwargs)
 
-    @classmethod
-    async def close_channel(cls, loop, channel):
-        if channel:
-            channel_closed = asyncio.Future()
-            channel.add_on_close_callback(
-                lambda channel, reason: loop.call_soon(channel_closed.set_result, True))
-            channel.close()
-            await channel_closed
-
-    @classmethod
-    async def stop_consumer(cls, loop, channel, consumer_tag):
-        if channel and consumer_tag:
-            consumer_stopped = asyncio.Future()
-            channel.basic_cancel(consumer_tag, callback=lambda _: loop.call_soon(
-                consumer_stopped.set_result, True))
-            await consumer_stopped
-
-    @classmethod
-    async def close_connection(cls, loop, connection):
-        if connection:
-            connection_closed = asyncio.Future()
-            connection.add_on_close_callback(
-                lambda channel, reason: loop.call_soon(connection_closed.set_result, True))
-            connection.close()
-            await connection_closed
-
-    @classmethod
-    async def subscribe(cls, parameters, exchange_name, binding, queue_declaration, exchange_declaration, callback, output_type):
-        loop = cls._get_loop()
-        conn = await cls._create_connection(loop, parameters)
-        subscription = Subscription(loop, conn, callback, output_type)
-
-        channel = await cls._create_channel(loop, conn)
-        subscription.add_channel(channel)
+    async def subscribe(self, exchange, binding, queue_declaration, exchange_declaration, callback, output_type):
+        channel = await self.new_channel()
+        subscription = Subscription(channel, callback, output_type)
 
         future_bind = asyncio.Future()
-
         async def on_channel_closed(channel, reason):
             if reason.reply_code == 404:
                 _logger.error(
-                    f"Channel for exchange \"{exchange_name}\" and queue \"{queue_name}\" closed due to: Exchange not found")
+                    f"Channel for exchange \"{exchange}\" and queue \"{queue_name}\" closed due to: Exchange not found")
                 # Remove the unused channel
-                new_channel = await asyncio.ensure_future(cls._create_channel(loop, conn))
-                new_channel.queue_delete(queue_name)
-                new_channel.close()
+                new_channel = await asyncio.ensure_future(self.new_channel())
+                await new_channel.queue_delete(queue_name)
+                await new_channel.close()
                 # Return the error
                 loop.call_soon(future_bind.set_result, reason)
 
@@ -189,19 +136,20 @@ class TopicsHelper(object):
 
         if exchange_declaration is not None:
             # Create the exchange
-            exchange = await cls._create_exchange(loop, channel, exchange_declaration)
+            await channel.exchange_declare(exchange_declaration)
 
         # Create the queue
-        queue = await cls._create_queue(loop, channel, queue_declaration)
+        queue = await channel.queue_declare(queue_declaration)
         queue_name = queue.method.queue
-
-        if exchange_name:
+        
+        if exchange:
             # Bind the queue to the exchange
             # The future_bind can be set by on_queue_bind_ok or by on_channel_closed
             # depending if the exchange exists or not
+            loop = asyncio.get_event_loop()
             def on_queue_bind_ok(bind):
                 loop.call_soon(future_bind.set_result, bind)
-            channel.queue_bind(queue=queue_name, exchange=exchange_name,
+            channel.queue_bind(queue=queue_name, exchange=exchange,
                                routing_key=binding, callback=on_queue_bind_ok)
             bind = await future_bind
             if isinstance(bind, pika.exceptions.ChannelClosedByBroker):
@@ -210,31 +158,132 @@ class TopicsHelper(object):
 
         # Start consuming
         subscription.start(queue_name)
+        self.add_subscription(subscription)
         return subscription
 
+    async def close(self, loop = None):
+        if self.connection:
+            if not loop:
+                loop = self.loop
+
+            connection_closed = asyncio.Future()
+            self.add_on_close_callback(
+                lambda channel, reason: loop.call_soon(connection_closed.set_result, True))
+            self.connection.close()
+            await connection_closed
+    
+    def add_on_close_callback(self, callback):
+        self.connection.add_on_close_callback(callback)
+
+@dataclass
+class PikaChannel(object):
+    channel: pika.channel.Channel
+    id: str
+    loop: asyncio.unix_events._UnixSelectorEventLoop
+
     @classmethod
-    async def send(cls, parameters, exchange, routing_key, body, exchange_declaration=None):
-        loop = cls._get_loop()
-        conn = await cls._create_connection(loop, parameters)
-        channel = await cls._create_channel(loop, conn)
+    async def create(cls, connection, id = None, loop = None):
+        if not loop:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If there is no event loop in the thread, create one abd set it
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
 
+        future_channel = asyncio.Future()
+        connection.channel(on_open_callback=lambda channel: loop.call_soon(
+            future_channel.set_result, channel))
+        return cls(await future_channel, id, loop)
+
+    async def exchange_declare(self, declaration, loop = None):
+        if not loop:
+            loop = self.loop
+
+        future_exchange = asyncio.Future()
+        self.channel.exchange_declare(**declaration,
+                                 callback=lambda exchange: loop.call_soon(future_exchange.set_result, exchange))
+        return await future_exchange
+    
+    async def exchange_delete(self, name, loop = None):
+        if not loop:
+            loop = self.loop
+
+        future_exchange_deletion = asyncio.Future()
+        self.channel.exchange_delete(name,
+                                callback=lambda queue: loop.call_soon(future_exchange_deletion.set_result, True))
+        return await future_exchange_deletion
+
+    async def queue_declare(self, declaration, loop = None):
+        if not loop:
+            loop = self.loop
+
+        future_queue = asyncio.Future()
+        self.channel.queue_declare(**declaration,
+                              callback=lambda queue: loop.call_soon(future_queue.set_result, queue))
+        return await future_queue
+    
+    async def queue_delete(self, name, loop = None):
+        if not loop:
+            loop = self.loop
+
+        future_queue_deletion = asyncio.Future()
+        self.channel.queue_delete(name,
+                                callback=lambda queue: loop.call_soon(future_queue_deletion.set_result, True))
+        return await future_queue_deletion
+    
+    def queue_bind(self, *args, **kwargs):
+        self.channel.queue_bind(*args, **kwargs)
+
+    def basic_consume(self, *args, **kwargs):
+        self.channel.basic_consume(*args, **kwargs)
+
+    async def send(self, exchange, routing_key, body, exchange_declaration=None):
         if exchange_declaration is not None:
-            exchange = await cls._create_exchange(loop, channel, exchange_declaration)
-
+            await self.exchange_declare(exchange_declaration)
         if isinstance(body, dict):
             body = json.dumps(body)
-        channel.basic_publish(
+        self.channel.basic_publish(
             exchange=exchange, routing_key=routing_key, body=body)
+        return self
 
-        await cls.close_channel(loop, channel)
-        await cls.close_connection(loop, conn)
+    def basic_ack(self, *args, **kwargs):
+        self.channel.basic_ack(*args, **kwargs)
+    
+    def basic_cancel(self, *args, **kwargs):
+        self.channel.basic_cancel(*args, **kwargs)
 
-    @classmethod
-    async def delete_exchange(cls, parameters, name):
-        loop = cls._get_loop()
-        conn = await cls._create_connection(loop, parameters)
-        channel = await cls._create_channel(loop, conn)
-        result = await cls._delete_exchange(loop, channel, name)
-        await cls.close_channel(loop, channel)
-        await cls.close_connection(loop, conn)
-        return result
+    async def stop(self, consumer_tag, loop = None):
+        if not loop:
+            loop = self.loop
+        
+        if self.channel and consumer_tag:
+            consumer_stopped = asyncio.Future()
+            self.basic_cancel(consumer_tag, callback=lambda _: loop.call_soon(
+                consumer_stopped.set_result, True))
+            await consumer_stopped
+
+    async def close(self, loop = None):
+        if self.channel:
+            if not loop:
+                loop = self.loop
+
+            channel_closed = asyncio.Future()
+            self.add_on_close_callback(
+                lambda channel, reason: loop.call_soon(channel_closed.set_result, True))
+            self.channel.close()
+            await channel_closed
+    
+    def add_on_close_callback(self, callback):
+        self.channel.add_on_close_callback(callback)
+    
+    def add_on_cancel_callback(self, callback):
+        self.channel.add_on_cancel_callback(callback)
+
+    @property
+    def is_closed(self):
+        return self.channel.is_closed
+    
+    @property
+    def is_closing(self):
+        return self.channel.is_closing

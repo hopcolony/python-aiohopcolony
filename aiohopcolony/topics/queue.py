@@ -2,10 +2,10 @@ from .helper import *
 
 
 class HopTopicQueue:
-    def __init__(self, add_subscription, parameters, exchange="", binding="", name="", durable=False,
-                 exclusive=False, auto_delete=True, exchange_declaration=None):
-        self.add_subscription = add_subscription
-        self.parameters = parameters
+    def __init__(self, connection, exchange="", binding="", name="", durable=False,
+                 exclusive=False, auto_delete=True, exchange_declaration=None, channel = None):
+        self.connection = connection
+        self.channel = channel
         self.exchange = exchange
         self.binding = binding
         self.exchange_declaration = exchange_declaration
@@ -14,12 +14,12 @@ class HopTopicQueue:
                                   "auto_delete": auto_delete}
 
     async def subscribe(self, callback, output_type=OutputType.STRING):
-        subscription = await TopicsHelper.subscribe(self.parameters, self.exchange, self.binding,
+        return await self.connection.subscribe(self.exchange, self.binding,
                                                     queue_declaration=self.queue_declaration,
                                                     exchange_declaration=self.exchange_declaration,
                                                     callback=callback, output_type=output_type)
-        self.add_subscription(subscription)
-        return subscription
 
-    async def send(self, body):
-        await TopicsHelper.send(self.parameters, self.exchange, self.binding, body, self.exchange_declaration)
+    async def send(self, body, channel = None):
+        if not channel:
+            channel = await self.channel(f"{self.exchange}.{self.binding}")
+        return await channel.send(self.exchange, self.binding, body, self.exchange_declaration)
