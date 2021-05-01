@@ -39,38 +39,39 @@ class TestTopics(object):
     @pytest.mark.asyncio
     async def test_b_subscriber_publisher_string(self, conn):
         await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.STRING)
-        await asyncio.sleep(0.2)
         await conn.topic(self.topic).send(self.data_string)
-        await asyncio.sleep(0.2)
         assert await self.queue.get() == self.data_string
         await conn.close()
 
     @pytest.mark.asyncio
     async def test_c_subscriber_publisher_good_json(self, conn):
         await conn.topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
-        await asyncio.sleep(0.2)
         await conn.topic(self.topic).send(self.data_json)
-        await asyncio.sleep(0.2)
         assert await self.queue.get() == self.data_json
         await conn.close()
 
     @pytest.mark.asyncio
-    async def test_d_exchange_topic(self, conn):
+    async def test_d_exchange_topic_fail(self, conn):
+        with pytest.raises(Exception):
+            await conn.exchange(self.exchange, create = False).topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
+    
+    @pytest.mark.asyncio
+    async def test_e_exchange_topic_fail(self, conn):
         await conn.exchange(self.exchange, create = True).topic(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
-        await asyncio.sleep(0.2)
         await conn.exchange(self.exchange).topic(self.topic).send(self.data_json)
-        await asyncio.sleep(0.2)
         assert await self.queue.get() == self.data_json
         await conn.close()
 
     @pytest.mark.asyncio
-    async def test_e_exchange_queue(self, conn):  
+    async def test_f_exchange_queue(self, conn):  
         await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check, output_type=topics.OutputType.JSON)
         await conn.exchange(self.exchange).queue(self.topic).subscribe(self.check_aux, output_type=topics.OutputType.JSON)
-        await asyncio.sleep(0.2)
         await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
         await conn.exchange(self.exchange).queue(self.topic).send(self.data_json)
-        await asyncio.sleep(0.2)
         assert await self.queue.get() == self.data_json
         assert await self.queue_aux.get() == self.data_json
         await conn.close()
+
+    @pytest.mark.asyncio
+    async def test_g_delete_exchange(self, conn):
+        await conn.exchange(self.exchange).delete()

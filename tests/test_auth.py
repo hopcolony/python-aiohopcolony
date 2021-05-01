@@ -14,7 +14,7 @@ def db():
 
 class TestAuth(object):
 
-    email = "lpaarup@hopcolony.io"
+    email = "tests@hopcolony.io"
     password = "secret"
     uid = "faad1898-1796-55ca-aa3d-5eec87f8655e"
     

@@ -1,20 +1,27 @@
 import aiohopcolony
 from .queue import *
 from .exchange import *
-import pika, asyncio, sys, logging, threading
+import pika
+import asyncio
+import logging
+import threading
 from signal import SIGINT, SIGTERM
 
 _logger = logging.getLogger(__name__)
 
-def connection(project = None):
+
+def connection(project=None):
     if not project:
         project = aiohopcolony.get_project()
     if not project:
-        raise aiohopcolony.ConfigNotFound("Hop Config not found. Run 'hopctl login' or place a .hop.config file here.")
+        raise aiohopcolony.ConfigNotFound(
+            "Hop Config not found. Run 'hopctl login' or place a .hop.config file here.")
     if not project.config.project:
-        raise aiohopcolony.ConfigNotFound("You have no projects yet. Create one at https://console.hopcolony.io")
-    
+        raise aiohopcolony.ConfigNotFound(
+            "You have no projects yet. Create one at https://console.hopcolony.io")
+
     return HopTopicConnection(project)
+
 
 class HopTopicConnection:
     subscriptions = []
@@ -24,20 +31,21 @@ class HopTopicConnection:
 
         self.host = "topics.hopcolony.io"
         self.port = 32012
-        self.credentials = pika.PlainCredentials(self.project.config.identity, self.project.config.token)
-        self.parameters = pika.ConnectionParameters(host=self.host, port=self.port, 
-                    virtual_host=self.project.config.identity, credentials=self.credentials)
-        
+        self.credentials = pika.PlainCredentials(
+            self.project.config.identity, self.project.config.token)
+        self.parameters = pika.ConnectionParameters(host=self.host, port=self.port,
+                                                    virtual_host=self.project.config.identity, credentials=self.credentials)
+
         self.loops = {}
 
     def queue(self, name):
-        return HopTopicQueue(self.add_subscription, self.parameters, binding = name, name = name)
+        return HopTopicQueue(self.add_subscription, self.parameters, binding=name, name=name)
 
-    def exchange(self, name, create = False):
-        return HopTopicExchange(self.add_subscription, self.parameters, name, create, type = ExchangeType.FANOUT)
+    def exchange(self, name, create=False):
+        return HopTopicExchange(self.add_subscription, self.parameters, name, create, type=ExchangeType.FANOUT)
 
-    def topic(self, name):     
-        return HopTopicQueue(self.add_subscription, self.parameters, exchange = "amq.topic", binding = name)
+    def topic(self, name):
+        return HopTopicQueue(self.add_subscription, self.parameters, exchange="amq.topic", binding=name)
 
     def add_subscription(self, conn):
         self.subscriptions.append(conn)
@@ -50,7 +58,7 @@ class HopTopicConnection:
                 loop.remove_signal_handler(SIGTERM)
                 loop.add_signal_handler(SIGINT, lambda: None)
 
-    def spin(self, loop = None):
+    def spin(self, loop=None):
         if not loop:
             try:
                 loop = asyncio.get_event_loop()
