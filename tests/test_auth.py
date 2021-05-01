@@ -16,7 +16,7 @@ class TestAuth(object):
 
     email = "tests@hopcolony.io"
     password = "secret"
-    uid = "faad1898-1796-55ca-aa3d-5eec87f8655e"
+    uid = "077f13f8-e824-539b-badf-590fd022c0d4"
     
     @pytest.mark.asyncio
     async def test_a_initialize(self, project, db):
