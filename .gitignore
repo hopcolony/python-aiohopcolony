@@ -6,3 +6,4 @@ build
 *.egg-info
 deploy.sh
 tests/config.py
+.python-version

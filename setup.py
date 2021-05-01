@@ -18,7 +18,10 @@ setup(
     keywords='hopcolony core cloud development backend asyncio',
     install_requires=[
         "aiofile==3.5.0",
-        "aiohttp==3.7.4"
+        "aiohttp==3.7.4",
+        "pyyaml==5.4.1",
+        "pika==1.2.0",
+        "beautifulsoup4==4.9.3"
     ],
     packages=find_packages(),
     python_requires='>=3.5',

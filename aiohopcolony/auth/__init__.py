@@ -8,7 +8,6 @@ from .auth_token import *
 import re, uuid, time, asyncio
 from datetime import datetime
 import functools, multiprocessing
-from simple_term_menu import TerminalMenu
 import subprocess
 
 def client(project = None):
@@ -38,19 +37,6 @@ class HopAuth:
     
     def user(self, uuid):
         return UserReference(self._docs, uuid)
-
-    async def select_project(self, user):
-        if not len(user.projects):
-            return None
-        terminal_menu = TerminalMenu(user.projects)
-        project_index = terminal_menu.show()
-        project =  user.projects[project_index]
-
-        snapshot = await self._docs.index(".hop.projects").where("uuid", isEqualTo=user.uuid).where("name", isEqualTo=project).get()
-        if snapshot.success and len(snapshot.docs):
-            return aiohopcolony.HopConfig(username = user.email, project = project, token = snapshot.docs[0].source["token"])
-        else:
-            return None
 
     async def sign_in_with_hopcolony(self, scopes = []):
         scopes = ','.join(scopes)

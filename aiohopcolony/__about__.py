@@ -1,6 +1,6 @@
 """About information for Hop Colony python SDK."""
 
-__version__ = '0.1.5'
+__version__ = '0.1.6'
 __title__ = 'aiohopcolony'
 __author__ = 'HopColony'
 __author_email__ = 'hopcolony@gmail.com'
