@@ -1,4 +1,4 @@
-from .helper import *
+from .pika_helper import *
 
 
 class HopTopicQueue:

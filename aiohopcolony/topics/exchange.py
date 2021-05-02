@@ -36,7 +36,7 @@ class HopTopicExchange:
     async def send(self, body, channel = None):
         if not channel:
             channel = await self.channel(f"{self.name}.")
-        return await channel.send(self.name, "", body, self.exchange_declaratio)
+        return await channel.send(self.name, "", body, self.exchange_declaration)
 
     def topic(self, name):
         return HopTopicQueue(self.connection, exchange=self.name,

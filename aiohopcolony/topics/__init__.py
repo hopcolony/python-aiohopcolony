@@ -1,7 +1,7 @@
 import aiohopcolony
 from .queue import *
 from .exchange import *
-from .helper import *
+from .pika_helper import *
 import pika
 import asyncio
 import logging
