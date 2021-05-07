@@ -18,9 +18,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio
+          pip install pytest pytest-asyncio pytest-cov
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      # - name: Test
-      #   run: pytest tests
+      - name: Test
+        run: pytest --cov-report term --cov=aiohopcolony tests/
+        env:
+          HOP_USER_NAME: ${{ secrets.HOP_USER_NAME }}
+          HOP_PROJECT_NAME: ${{ secrets.HOP_PROJECT_NAME }}
+          HOP_TOKEN: ${{ secrets.HOP_TOKEN }}
       - name: Upload coverage
         uses: codecov/codecov-action@v1

@@ -5,5 +5,6 @@ build
 *.spec
 *.egg-info
 deploy.sh
-tests/config.py
 .python-version
+coverage.xml
+.coverage
