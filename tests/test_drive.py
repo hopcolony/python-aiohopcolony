@@ -74,7 +74,7 @@ class TestDrive(object):
 
     @pytest.mark.asyncio
     async def test_i_create_object(self, db, img):
-        snapshot = await (await db.bucket(self.bucket).object(obj)).put(img)
+        snapshot = await db.bucket(self.bucket).object(obj).put(img)
         assert snapshot.success == True
 
     @pytest.mark.asyncio
@@ -85,14 +85,14 @@ class TestDrive(object):
 
     @pytest.mark.asyncio
     async def test_k_get_object(self, db, img):
-        snapshot = await (await db.bucket(self.bucket).object(obj)).get()
+        snapshot = await db.bucket(self.bucket).object(obj).get()
         assert snapshot.success == True
         assert obj == snapshot.object.id
         assert img == snapshot.object.data
 
     @pytest.mark.asyncio
     async def test_l_get_presigned_object(self, db, img):
-        url = (await db.bucket(self.bucket).object(obj)).get_presigned()
+        url = db.bucket(self.bucket).object(obj).get_presigned()
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.get(url) as response:
                 content = await response.read()
@@ -100,7 +100,7 @@ class TestDrive(object):
 
     @pytest.mark.asyncio
     async def test_m_delete_object(self, db):
-        result = await (await db.bucket(self.bucket).object(obj)).delete()
+        result = await db.bucket(self.bucket).object(obj).delete()
         assert result == True
 
     @pytest.mark.asyncio

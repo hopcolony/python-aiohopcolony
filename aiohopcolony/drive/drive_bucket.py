@@ -34,7 +34,7 @@ class BucketReference:
             soup = BeautifulSoup(response, features="html.parser")
             objects = []
             for s in soup.find_all("contents"):
-                url = (await self.object(s.find("key").text)).get_presigned()
+                url = self.object(s.find("key").text).get_presigned()
                 objects.append(Object.fromSoup(url, s))
             return BucketSnapshot(objects, success=True)
         except aiohttp.client_exceptions.ClientResponseError:
@@ -58,13 +58,16 @@ class BucketReference:
 
     async def add(self, data):
         id = uuid.uuid4().hex.upper()[0:10]
-        return await (await self.object(id)).put(data)
+        return await self.object(id).put(data)
 
-    async def object(self, id):
-        if not await self.exists:
-            success = await self.create()
-            assert success, f"{self.bucket} did not exist and could not be created"
-        return ObjectReference(self.client, self.bucket, id)
+    def object(self, id):
+        async def bucket_create():
+            # Create a coroutine to check and create the bucket in the object
+            # because we don't want to await here
+            if not await self.exists:
+                success = await self.create()
+                assert success, f"{self.bucket} did not exist and could not be created"
+        return ObjectReference(self.client, self.bucket, id, bucket_create)
 
     async def delete(self):
         # Delete all the objects before deleting the bucket
@@ -74,7 +77,7 @@ class BucketReference:
         else:
             snapshot = await self.get()
             for object in snapshot.objects:
-                await (await self.object(object.id)).delete()
+                await self.object(object.id).delete()
         try:
             await self.client.delete(f"/{self.bucket}")
             return True

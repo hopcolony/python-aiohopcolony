@@ -67,13 +67,15 @@ class ObjectSnapshot:
 
 
 class ObjectReference:
-    def __init__(self, client, bucket, id):
+    def __init__(self, client, bucket, id, bucket_create):
         self.client = client
         self.bucket = bucket
         self.id = id
+        self.bucket_create = bucket_create
 
     async def get(self):
         try:
+            await self.bucket_create()
             response = await self.client.get(f"/{self.bucket}/{self.id}", bytesOut=True)
             return ObjectSnapshot(Object(self.id, data=response),
                                   success=True)
@@ -87,6 +89,7 @@ class ObjectReference:
 
     async def put(self, data):
         try:
+            await self.bucket_create()
             await self.client.put(f"/{self.bucket}/{self.id}", data)
             return ObjectSnapshot(Object(self.id, data=data), success=True)
         except aiohttp.client_exceptions.ClientResponseError:
