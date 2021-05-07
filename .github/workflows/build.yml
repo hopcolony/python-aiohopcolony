@@ -1,0 +1,19 @@
+name: Build
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: A job to build aiohopcolony docker image
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Get latest pypi version
+        id: version
+        run: echo "::set-output name=version::$(python setup.py --version)"
+      - name: Build docker image
+        uses: ./.github/actions/docker
+        with:
+          version: ${{ steps.version.outputs.version }}
