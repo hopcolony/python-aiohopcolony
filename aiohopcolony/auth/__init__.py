@@ -5,23 +5,32 @@ import aiohopcolony.topics as topics
 from .auth_user import *
 from .auth_token import *
 
-import re, uuid, time, asyncio
+import re
+import uuid
+import time
+import asyncio
 from datetime import datetime
-import functools, multiprocessing
+import functools
+import multiprocessing
 import subprocess
 
-def client(project = None):
+
+def client(project=None):
     if not project:
         project = aiohopcolony.get_project()
     if not project:
-        raise aiohopcolony.ConfigNotFound("Hop Config not found. Run 'hopctl login' or place a .hop.config file here.")
+        raise aiohopcolony.ConfigNotFound(
+            "Hop Config not found. Run 'hopctl login' or place a .hop.config file here.")
     if not project.config.project:
-        raise aiohopcolony.ConfigNotFound("You have no projects yet. Create one at https://console.hopcolony.io")
-    
+        raise aiohopcolony.ConfigNotFound(
+            "You have no projects yet. Create one at https://console.hopcolony.io")
+
     return HopAuth(project)
+
 
 class DuplicatedEmail(Exception):
     pass
+
 
 class HopAuth:
     project: aiohopcolony.Project
@@ -30,34 +39,34 @@ class HopAuth:
     def __init__(self, project):
         self.project = project
         self._docs = docs.HopDoc(project)
-    
+
     async def get(self):
         snapshot = await self._docs.index(".hop.auth").get()
         return [HopUser.fromJson(user.source) for user in snapshot.docs]
-    
+
     def user(self, uuid):
         return UserReference(self._docs, uuid)
 
-    async def sign_in_with_hopcolony(self, scopes = []):
+    async def sign_in_with_hopcolony(self, scopes=[]):
         scopes = ','.join(scopes)
         client_id = self.project.config.identity
-        
+
         async def get_response(queue, msg):
             if msg["success"]:
                 token = Token(msg["idToken"])
                 queue.put(token)
             else:
                 queue.put(msg["reason"])
-        
+
         queue = asyncio.Queue()
         callback_with_event = functools.partial(get_response, queue)
 
         conn = topics.connection()
-        await conn.exchange("oauth").topic(client_id).subscribe(callback_with_event, output_type = topics.OutputType.JSON)
+        await conn.exchange("oauth").topic(client_id).subscribe(callback_with_event, output_type=topics.OutputType.JSON)
 
         # Open the browser for login
-        proc = subprocess.Popen(["firefox", f"https://accounts.hopcolony.io?client_id={client_id}&scope={scopes}"], 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(["firefox", f"https://accounts.hopcolony.io?client_id={client_id}&scope={scopes}"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Wait until there is a login response
         print("Please, login using the browser")
@@ -92,14 +101,15 @@ class HopAuth:
                 "locale": result.payload["locale"],
                 "isAnonymous": result.payload["isAnonymous"],
             })
-        
+
         snapshot.doc.source["projects"] = result.payload["projects"]
         user = HopUser.fromJson(snapshot.doc.source)
         return UserSnapshot(user, success=True)
-    
-    async def register_with_email_and_password(self, email, password, locale = "es"):
+
+    async def register_with_email_and_password(self, email, password, locale="es"):
         assert email and password, "Email and password can not be empty"
-        RESOURCE_ID_NAMESPACE = uuid.UUID('0a7a15ff-aa13-4ac2-897c-9bdf30ce175b')
+        RESOURCE_ID_NAMESPACE = uuid.UUID(
+            '0a7a15ff-aa13-4ac2-897c-9bdf30ce175b')
         uid = str(uuid.uuid5(RESOURCE_ID_NAMESPACE, email))
 
         snapshot = await self._docs.index(".hop.auth").document(uid).get()
@@ -108,20 +118,20 @@ class HopAuth:
 
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
         doc = {
-            "registerTs" : now,
-            "lastLoginTs" : now,
-            "provider" : "email",
-            "uuid" : uid,
-            "email" : email,
+            "registerTs": now,
+            "lastLoginTs": now,
+            "provider": "email",
+            "uuid": uid,
+            "email": email,
             "password": password,
-            "locale" : locale,
+            "locale": locale,
             "isAnonymous": False
         }
         currentUser = None
         snapshot = await self._docs.index(".hop.auth").document(uid).setData(doc)
         if snapshot.success:
             currentUser = HopUser.fromJson(snapshot.doc.source)
-        return UserSnapshot(currentUser, success = currentUser is not None)
+        return UserSnapshot(currentUser, success=currentUser is not None)
 
     async def delete(self, uid):
         return await self._docs.index(".hop.auth").document(uid).delete()

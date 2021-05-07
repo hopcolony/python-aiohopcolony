@@ -12,7 +12,7 @@ class ExchangeType(Enum):
 
 
 class HopTopicExchange:
-    def __init__(self, connection, name, create, type=ExchangeType.TOPIC, durable=True, auto_delete=False, channel=None):
+    def __init__(self, connection, name, create=None, type=ExchangeType.TOPIC, durable=True, auto_delete=False, channel=None):
         self.connection = connection
         self.channel = channel
         self.name = name
@@ -33,20 +33,20 @@ class HopTopicExchange:
         return await HopTopicQueue(self.connection, exchange=self.name, exchange_declaration=self.exchange_declaration) \
             .subscribe(callback, output_type=output_type)
 
-    async def send(self, body, channel = None):
+    async def send(self, body, channel=None):
         if not channel:
             channel = await self.channel(f"{self.name}.")
         return await channel.send(self.name, "", body, self.exchange_declaration)
 
     def topic(self, name):
         return HopTopicQueue(self.connection, exchange=self.name,
-                             binding=name, exchange_declaration=self.exchange_declaration, channel = self.channel)
+                             binding=name, exchange_declaration=self.exchange_declaration, channel=self.channel)
 
     def queue(self, name):
         return HopTopicQueue(self.connection, exchange=self.name,
-                             name=name, binding=name, exchange_declaration=self.exchange_declaration, channel = self.channel)
+                             name=name, binding=name, exchange_declaration=self.exchange_declaration, channel=self.channel)
 
-    async def delete(self, channel = None):
+    async def delete(self, channel=None):
         if not channel:
             channel = await self.channel(f"{self.name}.")
         return await channel.exchange_delete(self.name)

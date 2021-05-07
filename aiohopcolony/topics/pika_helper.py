@@ -17,10 +17,6 @@ class OutputType(Enum):
     JSON = 3
 
 
-class MalformedJson(Exception):
-    pass
-
-
 class Subscription(object):
     _canceled = False
     _tasks = []
@@ -48,8 +44,9 @@ class Subscription(object):
             try:
                 out = json.loads(body.decode('utf-8'))
             except json.decoder.JSONDecodeError as e:
-                raise MalformedJson(
-                    f"Malformed json message received on topic \"{self.binding}\": {body}") from e
+                _logger.error(
+                    f"[ERROR] Malformed json message received on topic \"{method.routing_key}\": {body}")
+                return
 
         if inspect.iscoroutinefunction(self.callback):
             self.loop.create_task(self.callback(out))
@@ -147,7 +144,7 @@ class PikaConnection(object):
                 lambda channel, reason: loop.call_soon(connection_closed.set_result, True))
             self.connection.close()
             await connection_closed
-    
+
     def add_on_close_callback(self, callback):
         self.connection.add_on_close_callback(callback)
 
@@ -184,11 +181,11 @@ class PikaChannel(object):
         future_channel = asyncio.Future()
         connection.channel(on_open_callback=lambda channel: loop.call_soon(
             future_channel.set_result, channel))
-        
+
         channel = await future_channel
 
         return cls(connection, channel, id, loop)
-    
+
     async def on_channel_closed(self, channel, reason):
         if reason.reply_code == 404:
             # Remove the unused queue with a new channel (this one is closed)

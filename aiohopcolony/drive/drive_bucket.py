@@ -1,8 +1,10 @@
 from .drive_object import *
 from bs4 import BeautifulSoup
 from datetime import datetime
-import uuid, aiohttp
+import uuid
+import aiohttp
 from dataclasses import dataclass
+
 
 @dataclass
 class Bucket:
@@ -20,6 +22,7 @@ class Bucket:
     def printable(self):
         return [self.name, self.num_objs, self.creation_date]
 
+
 class BucketReference:
     def __init__(self, client, bucket):
         self.client = client
@@ -33,10 +36,10 @@ class BucketReference:
             for s in soup.find_all("contents"):
                 url = (await self.object(s.find("key").text)).get_presigned()
                 objects.append(Object.fromSoup(url, s))
-            return BucketSnapshot(objects, success = True)
+            return BucketSnapshot(objects, success=True)
         except aiohttp.client_exceptions.ClientResponseError:
-            return BucketSnapshot(None, success = False)
-    
+            return BucketSnapshot(None, success=False)
+
     @property
     async def exists(self):
         try:
@@ -47,7 +50,7 @@ class BucketReference:
 
     async def create(self):
         try:
-            await self.client.put(f"/{self.bucket}", bodyBytes = b"")
+            await self.client.put(f"/{self.bucket}", bodyBytes=b"")
             return True
         except aiohttp.client_exceptions.ClientResponseError as e:
             print(e)
@@ -78,7 +81,8 @@ class BucketReference:
         except aiohttp.client_exceptions.ClientResponseError as e:
             return False
 
+
 class BucketSnapshot:
-    def __init__(self, objects, success = False):
+    def __init__(self, objects, success=False):
         self.objects = objects
         self.success = success

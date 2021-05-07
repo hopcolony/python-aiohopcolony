@@ -1,11 +1,13 @@
-import json, base64
+import json
+import base64
+
 
 def base64ToJson(input):
     input_bytes = input.encode('ascii')
 
     missing_padding = len(input_bytes) % 4
     if missing_padding:
-        input_bytes += b'='* (4 - missing_padding)
+        input_bytes += b'=' * (4 - missing_padding)
 
     data = base64.b64decode(input_bytes).decode('ascii')
     return json.loads(str(data))
@@ -32,6 +34,6 @@ class Token:
     @property
     def signature(self):
         return self._signature or self.raw_value[self._i1 + 1:]
-    
+
     def __str__(self):
         return self.raw_value

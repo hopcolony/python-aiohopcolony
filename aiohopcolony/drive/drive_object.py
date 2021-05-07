@@ -1,6 +1,8 @@
-import aiohttp, urllib.parse
+import aiohttp
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
+
 
 @dataclass
 class Owner:
@@ -11,17 +13,19 @@ class Owner:
     @classmethod
     def fromSoup(cls, soup):
         return cls(
-            id = soup.find("id").text,
-            display_name = soup.find("displayname").text
+            id=soup.find("id").text,
+            display_name=soup.find("displayname").text
         )
-    
+
     @property
     def json(self):
         return {"id": self.id, "display_name": self.display_name}
 
+
 @dataclass
 class Object:
-    printable_headers = ["Id", "Last Modified", "Size", "Owner", "Storageclass"]
+    printable_headers = ["Id", "Last Modified",
+                         "Size", "Owner", "Storageclass"]
 
     id: str
     data: bytes = b""
@@ -34,30 +38,33 @@ class Object:
 
     @classmethod
     def fromSoup(cls, url, soup):
-        last_modified = datetime.strptime(soup.find("lastmodified").text, '%Y-%m-%dT%H:%M:%S.%fZ')
+        last_modified = datetime.strptime(
+            soup.find("lastmodified").text, '%Y-%m-%dT%H:%M:%S.%fZ')
         return cls(
             soup.find("key").text,
-            url = url,
-            last_modified = last_modified,
-            etag = soup.find("etag").text.strip('"'),
-            size = soup.find("size").text,
-            owner = Owner.fromSoup(soup.find("owner")),
-            storageclass = soup.find("storageclass").text
+            url=url,
+            last_modified=last_modified,
+            etag=soup.find("etag").text.strip('"'),
+            size=soup.find("size").text,
+            owner=Owner.fromSoup(soup.find("owner")),
+            storageclass=soup.find("storageclass").text
         )
-    
+
     @property
     def json(self):
-        return {"id": self.id, "url": self.url, "last_modified": self.last_modified, "etag": self.etag, \
-                 "size": self.size, "owner": self.owner.json, "storageclass": self.storageclass}
+        return {"id": self.id, "url": self.url, "last_modified": self.last_modified, "etag": self.etag,
+                "size": self.size, "owner": self.owner.json, "storageclass": self.storageclass}
 
     @property
     def printable(self):
         return [self.id, self.last_modified, self.size, self.owner.display_name, self.storageclass]
 
+
 class ObjectSnapshot:
-    def __init__(self, object, success = False):
+    def __init__(self, object, success=False):
         self.object = object
         self.success = success
+
 
 class ObjectReference:
     def __init__(self, client, bucket, id):
@@ -68,11 +75,11 @@ class ObjectReference:
     async def get(self):
         try:
             response = await self.client.get(f"/{self.bucket}/{self.id}", bytesOut=True)
-            return ObjectSnapshot(Object(self.id, data = response),\
-                     success = True)
+            return ObjectSnapshot(Object(self.id, data=response),
+                                  success=True)
         except aiohttp.client_exceptions.ClientResponseError:
-            return ObjectSnapshot(None, success = False)
-        
+            return ObjectSnapshot(None, success=False)
+
     def get_presigned(self):
         resource = f"/{self.bucket}/{self.id}"
         query = self.client.signer.getQuerySignature("GET", resource)
@@ -81,10 +88,10 @@ class ObjectReference:
     async def put(self, data):
         try:
             await self.client.put(f"/{self.bucket}/{self.id}", data)
-            return ObjectSnapshot(Object(self.id, data = data), success=True)
+            return ObjectSnapshot(Object(self.id, data=data), success=True)
         except aiohttp.client_exceptions.ClientResponseError:
-            return ObjectSnapshot(None, success = False)
-        
+            return ObjectSnapshot(None, success=False)
+
     async def delete(self):
         try:
             await self.client.delete(f"/{self.bucket}/{self.id}")

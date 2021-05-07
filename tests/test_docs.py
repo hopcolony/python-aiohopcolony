@@ -3,14 +3,17 @@ from .config import *
 import aiohopcolony
 from aiohopcolony import docs
 
+
 @pytest.fixture
 async def project():
-    return await aiohopcolony.initialize(username = user_name, project = project_name, 
-                                            token = token)
+    return await aiohopcolony.initialize(username=user_name, project=project_name,
+                                         token=token)
+
 
 @pytest.fixture
 def db():
     return docs.client()
+
 
 class TestDocs(object):
 
@@ -30,7 +33,7 @@ class TestDocs(object):
     @pytest.mark.asyncio
     async def test_b_status(self, db):
         status = await db.status
-        assert status["status"] !=  "red"
+        assert status["status"] != "red"
 
     @pytest.mark.asyncio
     async def test_c_create_document(self, db):

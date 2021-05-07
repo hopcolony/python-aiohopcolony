@@ -1,22 +1,28 @@
-import pytest, os, aiohttp
+import pytest
+import os
+import aiohttp
 from .config import *
 import aiohopcolony
 from aiohopcolony import drive
 
 obj = "test"
 
+
 @pytest.fixture
 async def project():
-    return await aiohopcolony.initialize(username = user_name, project = project_name, 
-                                            token = token)
+    return await aiohopcolony.initialize(username=user_name, project=project_name,
+                                         token=token)
+
 
 @pytest.fixture
 def db():
     return drive.client()
 
+
 @pytest.fixture
 async def img():
     return await drive.load_image(os.path.join(os.path.dirname(__file__), "resources", obj))
+
 
 class TestDrive(object):
 
@@ -30,7 +36,7 @@ class TestDrive(object):
         assert db.project.name == project.name
         assert db.client.host == "drive.hopcolony.io"
         assert db.client.identity == project.config.identity
-    
+
     @pytest.mark.asyncio
     async def test_b_load_image(self):
         with pytest.raises(FileNotFoundError):
@@ -50,7 +56,7 @@ class TestDrive(object):
     async def test_e_get_existing_bucket(self, db):
         snapshot = await db.bucket(self.bucket).get()
         assert snapshot.success == True
-    
+
     @pytest.mark.asyncio
     async def test_f_list_buckets(self, db):
         buckets = await db.get()
@@ -70,7 +76,7 @@ class TestDrive(object):
     async def test_i_create_object(self, db, img):
         snapshot = await (await db.bucket(self.bucket).object(obj)).put(img)
         assert snapshot.success == True
-    
+
     @pytest.mark.asyncio
     async def test_j_find_object(self, db):
         snapshot = await db.bucket(self.bucket).get()
@@ -83,7 +89,7 @@ class TestDrive(object):
         assert snapshot.success == True
         assert obj == snapshot.object.id
         assert img == snapshot.object.data
-    
+
     @pytest.mark.asyncio
     async def test_l_get_presigned_object(self, db, img):
         url = (await db.bucket(self.bucket).object(obj)).get_presigned()
@@ -91,7 +97,7 @@ class TestDrive(object):
             async with session.get(url) as response:
                 content = await response.read()
                 assert content == img
-    
+
     @pytest.mark.asyncio
     async def test_m_delete_object(self, db):
         result = await (await db.bucket(self.bucket).object(obj)).delete()
