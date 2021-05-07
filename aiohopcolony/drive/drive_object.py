@@ -7,7 +7,7 @@ from datetime import datetime
 @dataclass
 class Owner:
 
-    id: str = None,
+    id: str = None
     display_name: str = None
 
     @classmethod
