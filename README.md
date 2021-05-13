@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://hopcolony.io"><img src="https://hopcolony.io/img/logo.png" alt="hopcolony"></a>
+    <a href="https://hopcolony.io"><img src="https://github.com/hopcolony/hopcolony/raw/master/docs/assets/images/logo.png" alt="hopcolony"></a>
 </p>
 <p align="center">
     <em>Focus on you app. Let us manage your backend.</em>
