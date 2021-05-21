@@ -41,14 +41,28 @@ class HopUser:
         )
 
     @property
+    def json(self):
+        return {
+            "registerTs": self.registerTs.strftime('%Y-%m-%d %H:%M:%S.%f'),
+            "provider": self.provider,
+            "uuid": self.uuid,
+            "email": self.email,
+            "lastLoginTs": self.lastLoginTs.strftime('%Y-%m-%d %H:%M:%S.%f'),
+            "name": self.name,
+            "picture": self.picture,
+            "locale": self.locale,
+            "isAnonymous": self.isAnonymous
+        }
+
+    @property
     def printable(self):
         return [self.uuid, self.email, self.provider, self.registerTs, self.lastLoginTs, self.isAnonymous]
 
 
 @dataclass
-class UserSnapshot:
-    user: HopUser
-    success: bool = True
+class AuthResult:
+    success: bool
+    user: HopUser = None
     reason: str = ""
 
 

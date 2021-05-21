@@ -20,7 +20,7 @@ class TestAuth(object):
 
     email = "tests@hopcolony.io"
     password = "secret"
-    uid = "077f13f8-e824-539b-badf-590fd022c0d4"
+    uid = "eb562632-c4b3-50da-9a65-d2083f347af5"
 
     @pytest.mark.asyncio
     async def test_a_initialize(self, project, db):
@@ -41,7 +41,7 @@ class TestAuth(object):
     @pytest.mark.asyncio
     async def test_c_register_duplicated(self, db):
         with pytest.raises(auth.DuplicatedEmail):
-            result = await db.register_with_email_and_password(self.email, self.password)
+            await db.register_with_email_and_password(self.email, self.password)
 
     @pytest.mark.asyncio
     async def test_d_list_users(self, db):
@@ -51,5 +51,15 @@ class TestAuth(object):
         assert self.email in [user.email for user in users]
 
     @pytest.mark.asyncio
-    async def test_e_delete_user(self, db):
-        result = await db.delete(self.uid)
+    async def test_e_sign_in(self, db):
+        result = await db.sign_in_with_email_and_password(self.email, self.password)
+        assert result.success == True
+        user = result.user
+        assert user.provider == "email"
+        assert user.email == self.email
+        assert user.password == self.password
+        assert user.uuid != None
+
+    @pytest.mark.asyncio
+    async def test_f_delete_user(self, db):
+        await db.delete(self.uid)

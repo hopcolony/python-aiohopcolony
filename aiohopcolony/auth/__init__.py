@@ -4,14 +4,12 @@ import aiohopcolony.topics as topics
 
 from .auth_user import *
 from .auth_token import *
+from .auth_credentials import *
 
-import re
 import uuid
-import time
 import asyncio
 from datetime import datetime
 import functools
-import multiprocessing
 import subprocess
 
 
@@ -32,6 +30,10 @@ class DuplicatedEmail(Exception):
     pass
 
 
+class HopAuthException(Exception):
+    pass
+
+
 class HopAuth:
     project: aiohopcolony.Project
     _docs: docs.HopDoc
@@ -47,16 +49,53 @@ class HopAuth:
     def user(self, uuid):
         return UserReference(self._docs, uuid)
 
-    async def sign_in_with_hopcolony(self, scopes=[]):
+    async def sign_in_with_email_and_password(self, email, password) -> AuthResult:
+        uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, email))
+        snapshot = await self._docs.index(".hop.auth").document(uid).get()
+        if snapshot.success:
+            if snapshot.doc.source["password"] == password:
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                await self._docs.index(".hop.auth").document(uid).update({"lastLoginTs": now})
+
+                user = HopUser.fromJson(snapshot.doc.source)
+                self.currentUser = user
+                return AuthResult(success=True, user=user)
+            return AuthResult(success=False, reason="Incorrect Password")
+        return AuthResult(success=False, reason="Email does not exist")
+
+    async def sign_in_with_credential(self, credential: AuthCredential) -> AuthResult:
+        uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, credential.email))
+        ref = self._docs.index(".hop.auth").document(uid)
+        snapshot = await ref.get()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        snapshot = await ref.update({"lastLoginTs": now}) if snapshot.success else \
+            await ref.setData({
+                "registerTs": now,
+                "lastLoginTs": now,
+                "provider": credential.provider,
+                "uuid": uid,
+                "email": credential.email,
+                "name": credential.name,
+                "picture": credential.picture,
+                "locale": credential.locale,
+                "isAnonymous": False,
+            })
+
+        user = HopUser.fromJson(snapshot.doc.source)
+        self.currentUser = user
+        return AuthResult(success=True, user=user)
+
+    async def sign_in_with_hopcolony(self, scopes=[]) -> AuthResult:
         scopes = ','.join(scopes)
         client_id = self.project.config.identity
 
         async def get_response(queue, msg):
             if msg["success"]:
-                token = Token(msg["idToken"])
-                queue.put(token)
+                credential = HopAuthProvider.credential(idToken=msg["idToken"])
+                result = await self.signInWithCredential(credential)
+                queue.put(result)
             else:
-                queue.put(msg["reason"])
+                queue.put(AuthResult(success=False, reason=msg["reason"]))
 
         queue = asyncio.Queue()
         callback_with_event = functools.partial(get_response, queue)
@@ -77,40 +116,21 @@ class HopAuth:
         # Close connection with topics
         conn.close()
 
-        # Parse the response
-        if isinstance(result, str):
-            return UserSnapshot(None, success=False, reason=result)
-
         # Close the browser window
         proc.terminate()
         proc.wait()
 
-        # Update or create the user in the database
-        ref = self._docs.index(".hop.auth").document(result.payload["uuid"])
-        snapshot = await ref.get()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-        snapshot = await ref.update({"lastLoginTs": now}) if snapshot.success else \
-            await ref.setData({
-                "registerTs": now,
-                "lastLoginTs": now,
-                "provider": result.payload["provider"],
-                "uuid": result.payload["uuid"],
-                "email": result.payload["email"],
-                "name": result.payload["name"],
-                "picture": result.payload["picture"],
-                "locale": result.payload["locale"],
-                "isAnonymous": result.payload["isAnonymous"],
-            })
+        # Parse the response
+        if not result.success:
+            raise HopAuthException(result.reason)
 
-        snapshot.doc.source["projects"] = result.payload["projects"]
-        user = HopUser.fromJson(snapshot.doc.source)
-        return UserSnapshot(user, success=True)
+        self.currentUser = result.user
 
-    async def register_with_email_and_password(self, email, password, locale="es"):
+        return result
+
+    async def register_with_email_and_password(self, email, password, locale="es") -> AuthResult:
         assert email and password, "Email and password can not be empty"
-        RESOURCE_ID_NAMESPACE = uuid.UUID(
-            '0a7a15ff-aa13-4ac2-897c-9bdf30ce175b')
-        uid = str(uuid.uuid5(RESOURCE_ID_NAMESPACE, email))
+        uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, email))
 
         snapshot = await self._docs.index(".hop.auth").document(uid).get()
         if snapshot.success:
@@ -131,7 +151,7 @@ class HopAuth:
         snapshot = await self._docs.index(".hop.auth").document(uid).setData(doc)
         if snapshot.success:
             currentUser = HopUser.fromJson(snapshot.doc.source)
-        return UserSnapshot(currentUser, success=currentUser is not None)
+        return AuthResult(success=True, user = currentUser)
 
     async def delete(self, uid):
         return await self._docs.index(".hop.auth").document(uid).delete()
