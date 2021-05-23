@@ -12,11 +12,20 @@ def base64ToJson(input):
     data = base64.b64decode(input_bytes).decode('ascii')
     return json.loads(str(data))
 
+def jsonToBase64(input):
+    return base64.b64encode(json.dumps(input).encode('ascii')).decode('ascii')
+
 
 class Token:
     _header = None
     _payload = None
     _signature = None
+
+    _header = {
+        "alg": "RS256",
+        "kid": "fed80fec56db99233d4b4f60fbafdbaeb9186c73",
+        "typ": "JWT"
+    }
 
     def __init__(self, raw_value):
         self.raw_value = raw_value
@@ -37,3 +46,10 @@ class Token:
 
     def __str__(self):
         return self.raw_value
+
+    @classmethod
+    def fromData(cls, payload):
+        headerRaw = jsonToBase64(cls._header)
+        payloadRaw = jsonToBase64(payload)
+
+        return Token(f"{headerRaw}.{payloadRaw}.abc")

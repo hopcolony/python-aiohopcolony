@@ -97,7 +97,6 @@ class HopTopicConnection:
     async def channel(self, name):
         if name not in self.channels:
             self.channels[name] = await PikaChannel.create(self.connection, id=name)
-
         return self.channels[name]
 
     def signal_handler(self, sig):

@@ -154,6 +154,8 @@ class PikaChannel(object):
     id: str
     loop: asyncio.unix_events._UnixSelectorEventLoop
 
+    name = None
+
     future_queue_bind: asyncio.Future
     future_channel_closed: asyncio.Future
 
@@ -189,9 +191,10 @@ class PikaChannel(object):
     async def on_channel_closed(self, channel, reason):
         if reason.reply_code == 404:
             # Remove the unused queue with a new channel (this one is closed)
-            new_channel = await PikaChannel.create(self.connection)
-            await new_channel.queue_delete(self.name)
-            await new_channel.close()
+            if self.name is not None:
+                new_channel = await PikaChannel.create(self.connection)
+                await new_channel.queue_delete(self.name)
+                await new_channel.close()
             # Return the error
             self.loop.call_soon(self.future_queue_bind.set_result, reason)
         else:
