@@ -140,7 +140,7 @@ class HopAuth:
         doc = {
             "registerTs": now,
             "lastLoginTs": now,
-            "provider": "email",
+            "provider": "Email",
             "uuid": uid,
             "email": email,
             "password": password,
