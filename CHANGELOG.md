@@ -6,3 +6,7 @@
 ## 0.1.8
 
 * Minor changes to Auth Token
+
+## 0.1.9
+
+* Added Token header to docs

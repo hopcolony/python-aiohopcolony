@@ -33,7 +33,7 @@ class TestAuth(object):
         result = await db.register_with_email_and_password(self.email, self.password)
         assert result.success == True
         user = result.user
-        assert user.provider == "email"
+        assert user.provider == "Email"
         assert user.email == self.email
         assert user.password == self.password
         assert user.uuid != None
@@ -55,7 +55,7 @@ class TestAuth(object):
         result = await db.sign_in_with_email_and_password(self.email, self.password)
         assert result.success == True
         user = result.user
-        assert user.provider == "email"
+        assert user.provider == "Email"
         assert user.email == self.email
         assert user.password == self.password
         assert user.uuid != None

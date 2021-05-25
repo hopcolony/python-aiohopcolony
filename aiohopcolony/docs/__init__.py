@@ -31,25 +31,28 @@ class HopDocClient:
         self.port = 443
         self.identity = project.config.identity
         self._base_url = f"https://{self.host}:{self.port}/{self.identity}/api"
+        self._headers = {
+            "Token": self.project.config.token
+        }
 
     async def get(self, path, **kwargs):
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            async with session.get(self._base_url + path, **kwargs) as response:
+            async with session.get(self._base_url + path, headers=self._headers, **kwargs) as response:
                 return await response.json()
 
     async def post(self, path, **kwargs):
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            async with session.post(self._base_url + path, **kwargs) as response:
+            async with session.post(self._base_url + path, headers=self._headers, **kwargs) as response:
                 return await response.json()
 
     async def put(self, path, **kwargs):
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            async with session.put(self._base_url + path, **kwargs) as response:
+            async with session.put(self._base_url + path, headers=self._headers, **kwargs) as response:
                 return await response.json()
 
     async def delete(self, path, **kwargs):
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            async with session.delete(self._base_url + path, **kwargs) as response:
+            async with session.delete(self._base_url + path, headers=self._headers, **kwargs) as response:
                 return await response.json()
 
 
