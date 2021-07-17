@@ -35,7 +35,7 @@ class HopTopicConnection:
         self.project = project
 
         self.host = "topics.hopcolony.io"
-        self.port = 15012
+        self.port = 32012
         self.credentials = pika.PlainCredentials(
             self.project.config.identity, self.project.config.token)
         self.parameters = pika.ConnectionParameters(host=self.host, port=self.port,
