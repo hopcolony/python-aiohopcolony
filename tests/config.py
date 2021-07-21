@@ -1,5 +1,5 @@
 import os
 
-user_name = os.environ.get("HOP_USER_NAME")
-project_name = os.environ.get("HOP_PROJECT_NAME")
+user_name = os.environ.get("HOP_USERNAME")
+project_name = os.environ.get("HOP_PROJECT")
 token = os.environ.get("HOP_TOKEN")
